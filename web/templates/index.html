@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Violence Detection System - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        h1 span {
+            color: #e94560;
+        }
+
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-running {
+            background: rgba(46, 213, 115, 0.2);
+            color: #2ed573;
+            border: 1px solid #2ed573;
+        }
+
+        .status-stopped {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+            border: 1px solid #ff4757;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 30px;
+        }
+
+        .video-section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .video-container img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+
+        .video-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #e94560;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #ff6b81;
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #a0a0a0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-value.danger {
+            color: #ff4757;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #a0a0a0;
+            margin-top: 5px;
+            text-transform: uppercase;
+        }
+
+        .alert-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: rgba(233, 69, 96, 0.1);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid #e94560;
+        }
+
+        .alert-icon {
+            width: 36px;
+            height: 36px;
+            background: rgba(233, 69, 96, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            font-size: 1.2rem;
+        }
+
+        .alert-info {
+            flex: 1;
+        }
+
+        .alert-time {
+            font-size: 0.8rem;
+            color: #a0a0a0;
+        }
+
+        .alert-detail {
+            font-size: 0.9rem;
+            color: #fff;
+            margin-top: 2px;
+        }
+
+        .no-alerts {
+            text-align: center;
+            color: #a0a0a0;
+            padding: 30px;
+        }
+
+        .config-section {
+            margin-top: 20px;
+        }
+
+        .config-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .config-label {
+            color: #a0a0a0;
+            font-size: 0.9rem;
+        }
+
+        .config-value {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        input[type="range"] {
+            width: 120px;
+            accent-color: #e94560;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Violence <span>Detection</span> System</h1>
+            <span id="status-badge" class="status-badge status-stopped">Stopped</span>
+        </header>
+
+        <div class="main-content">
+            <div class="video-section">
+                <div class="video-container">
+                    <img id="video-feed" src="/video_feed" alt="Video Feed">
+                    <div class="video-overlay">
+                        <span id="fps-display">FPS: --</span>
+                    </div>
+                </div>
+                <div class="video-controls">
+                    <button class="btn btn-primary" onclick="startDetection()">Start Detection</button>
+                    <button class="btn btn-secondary" onclick="stopDetection()">Stop</button>
+                    <button class="btn btn-secondary" onclick="resetStats()">Reset Stats</button>
+                    <button class="btn btn-secondary" onclick="takeSnapshot()">Snapshot</button>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <div class="card">
+                    <h3 class="card-title">Statistics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="total-frames">0</div>
+                            <div class="stat-label">Total Frames</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="current-fps">0</div>
+                            <div class="stat-label">Current FPS</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value danger" id="violence-count">0</div>
+                            <div class="stat-label">Violence Detected</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="uptime">00:00:00</div>
+                            <div class="stat-label">Uptime</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">Recent Alerts</h3>
+                    <div class="alert-list" id="alert-list">
+                        <div class="no-alerts">No alerts yet</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">Configuration</h3>
+                    <div class="config-section">
+                        <div class="config-item">
+                            <span class="config-label">Violence Threshold</span>
+                            <input type="range" id="threshold-slider" min="0.3" max="0.9" step="0.05" value="0.6"
+                                   onchange="updateThreshold(this.value)">
+                            <span class="config-value" id="threshold-value">0.60</span>
+                        </div>
+                        <div class="config-item">
+                            <span class="config-label">YOLO Detection</span>
+                            <span class="config-value" id="yolo-status">Enabled</span>
+                        </div>
+                        <div class="config-item">
+                            <span class="config-label">Video Source</span>
+                            <span class="config-value" id="video-source">Camera 0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update stats every second
+        setInterval(updateStats, 1000);
+        setInterval(updateAlerts, 5000);
+
+        // Load initial config
+        loadConfig();
+
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+
+                document.getElementById('total-frames').textContent = formatNumber(data.total_frames);
+                document.getElementById('current-fps').textContent = data.current_fps.toFixed(1);
+                document.getElementById('violence-count').textContent = formatNumber(data.violence_detections);
+                document.getElementById('uptime').textContent = data.uptime || '00:00:00';
+                document.getElementById('fps-display').textContent = `FPS: ${data.current_fps.toFixed(1)}`;
+
+                // Update status badge
+                const badge = document.getElementById('status-badge');
+                if (data.is_running) {
+                    badge.textContent = 'Running';
+                    badge.className = 'status-badge status-running';
+                } else {
+                    badge.textContent = 'Stopped';
+                    badge.className = 'status-badge status-stopped';
+                }
+            } catch (error) {
+                console.error('Failed to update stats:', error);
+            }
+        }
+
+        async function updateAlerts() {
+            try {
+                const response = await fetch('/api/alerts?limit=10');
+                const alerts = await response.json();
+
+                const alertList = document.getElementById('alert-list');
+
+                if (alerts.length === 0) {
+                    alertList.innerHTML = '<div class="no-alerts">No alerts yet</div>';
+                    return;
+                }
+
+                alertList.innerHTML = alerts.reverse().map(alert => `
+                    <div class="alert-item">
+                        <div class="alert-icon">⚠️</div>
+                        <div class="alert-info">
+                            <div class="alert-time">${new Date(alert.timestamp).toLocaleTimeString()}</div>
+                            <div class="alert-detail">Person ${alert.person_id} - ${(alert.confidence * 100).toFixed(1)}% confidence</div>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to update alerts:', error);
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+
+                document.getElementById('threshold-slider').value = config.violence_threshold;
+                document.getElementById('threshold-value').textContent = config.violence_threshold.toFixed(2);
+                document.getElementById('yolo-status').textContent = config.use_yolo ? 'Enabled' : 'Disabled';
+                document.getElementById('video-source').textContent = typeof config.video_source === 'number'
+                    ? `Camera ${config.video_source}`
+                    : config.video_source;
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+
+        async function startDetection() {
+            try {
+                await fetch('/api/start', { method: 'POST' });
+                document.getElementById('video-feed').src = '/video_feed?' + new Date().getTime();
+            } catch (error) {
+                console.error('Failed to start detection:', error);
+            }
+        }
+
+        async function stopDetection() {
+            try {
+                await fetch('/api/stop', { method: 'POST' });
+            } catch (error) {
+                console.error('Failed to stop detection:', error);
+            }
+        }
+
+        async function resetStats() {
+            try {
+                await fetch('/api/reset', { method: 'POST' });
+                updateStats();
+                updateAlerts();
+            } catch (error) {
+                console.error('Failed to reset stats:', error);
+            }
+        }
+
+        async function updateThreshold(value) {
+            document.getElementById('threshold-value').textContent = parseFloat(value).toFixed(2);
+            try {
+                await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ violence_threshold: parseFloat(value) })
+                });
+            } catch (error) {
+                console.error('Failed to update threshold:', error);
+            }
+        }
+
+        function takeSnapshot() {
+            window.open('/api/snapshot', '_blank');
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+    </script>
+</body>
+</html>
