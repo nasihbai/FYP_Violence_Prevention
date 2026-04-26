@@ -1,4 +1,4 @@
 from .db import init_db
-from .models import Incident
+from .models import User, Stream, Incident, Alert, DetectionLog
 
-__all__ = ['init_db', 'Incident']
+__all__ = ['init_db', 'User', 'Stream', 'Incident', 'Alert', 'DetectionLog']

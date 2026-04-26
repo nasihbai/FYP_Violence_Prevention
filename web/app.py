@@ -28,9 +28,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import WebConfig, VideoConfig, AlertConfig
 from core.detection_engine import ThreadSafeDetector, FrameResult
-from database import init_db, Incident
+from database import init_db, User, Stream, Incident, Alert, DetectionLog
 from database.db import get_session
-from auth import auth_bp, require_manage_role
+from auth import auth_bp, require_manage_role, seed_demo_users
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ app.register_blueprint(auth_bp)
 
 # Initialise database (SQLite by default; set DATABASE_URL env var for PostgreSQL)
 init_db()
+seed_demo_users()
 
 # ==================== GLOBAL STATE ====================
 
@@ -96,8 +97,29 @@ def initialize_detector(model_path: str = None, source=0, use_yolo: bool = True)
     logger.info(f"Detector initialised — source: {source}")
 
 
+def _get_or_create_stream(session, source) -> Stream:
+    """Return the Stream record for the current video source, creating it if absent."""
+    stream_id = f"CAM_{source}" if isinstance(source, int) else Path(str(source)).stem.upper()
+    stream = session.query(Stream).filter_by(stream_id=stream_id).first()
+    if not stream:
+        stream = Stream(
+            stream_id=stream_id,
+            name=f"Camera {source}",
+            source_url=str(source),
+            location=None,
+            is_active=True,
+        )
+        session.add(stream)
+        session.flush()  # get id without committing
+    return stream
+
+
 def _save_incident(det, screenshot_path: str = None) -> dict | None:
-    """Persist a violence detection event and return its dict representation."""
+    """
+    Persist a violence detection event.
+    Creates: Stream (if needed) → Incident → Alert.
+    Returns the Alert dict (matches the shape the Vue store expects).
+    """
     session = get_session()
     try:
         confidence = float(det.confidence)
@@ -105,21 +127,52 @@ def _save_incident(det, screenshot_path: str = None) -> dict | None:
             severity = 'high'
         elif confidence > 0.70:
             severity = 'medium'
+        elif confidence > 0.55:
+            severity = 'low'
         else:
             severity = 'low'
 
+        alert_type = 'violent' if severity in ('high', 'medium') else 'threatening'
+
+        stream = _get_or_create_stream(session, video_source)
+
+        # Generate human-readable incident code
+        year = datetime.utcnow().year
+        count = session.query(Incident).count() + 1
+        incident_code = f"INC-{year}-{count:04d}"
+
         incident = Incident(
-            timestamp=datetime.utcnow(),
-            person_id=int(det.person_id) if det.person_id is not None else None,
+            incident_code=incident_code,
+            stream_id=stream.stream_id,
+            type=alert_type,
             confidence=confidence,
-            bbox=json.dumps(det.bbox) if det.bbox else None,
+            timestamp=datetime.utcnow(),
+            location=stream.location,
             screenshot_path=screenshot_path,
             severity=severity,
-            camera_id=str(video_source),
+            status='open',
         )
         session.add(incident)
+        session.flush()
+
+        alert = Alert(
+            incident_id=incident.id,
+            type=alert_type,
+            confidence=confidence,
+            timestamp=datetime.utcnow(),
+        )
+        session.add(alert)
         session.commit()
-        return incident.to_dict()
+
+        # Return shape expected by Vue monitoring store (FlaskViolenceAlert)
+        return {
+            'id':        alert.id,
+            'timestamp': alert.timestamp.isoformat(),
+            'person_id': int(det.person_id) if det.person_id is not None else None,
+            'confidence': confidence,
+            'severity':  severity,
+            'camera_id': stream.stream_id,
+        }
     except Exception as exc:
         session.rollback()
         logger.error(f"Failed to save incident: {exc}")
@@ -128,7 +181,39 @@ def _save_incident(det, screenshot_path: str = None) -> dict | None:
         session.close()
 
 
+def _write_detection_log(stream_id: str, result, processing_ms: float):
+    """Write one DetectionLog row. Called every LOG_INTERVAL frames."""
+    session = get_session()
+    try:
+        detections_data = [
+            {
+                'person_id':  d.person_id,
+                'confidence': round(float(d.confidence), 4),
+                'is_violent': d.is_violent,
+                'bbox':       d.bbox,
+            }
+            for d in result.detections
+        ] if result.detections else []
+
+        session.add(DetectionLog(
+            stream_id=stream_id,
+            timestamp=datetime.utcnow(),
+            person_count=len(detections_data),
+            detections=detections_data,
+            processing_time_ms=round(processing_ms, 2),
+        ))
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.debug(f"Detection log write failed: {exc}")
+    finally:
+        session.close()
+
+
 # ==================== VIDEO / DETECTION ====================
+
+LOG_INTERVAL = 30   # write a DetectionLog row every N frames
+
 
 def generate_frames():
     """Generator for MJPEG video streaming. Saves incidents and emits SocketIO events."""
@@ -142,8 +227,13 @@ def generate_frames():
     is_running = True
     stats['start_time'] = datetime.now()
 
+    # Resolve stream_id once so we don't recalculate every frame
+    stream_id = f"CAM_{video_source}" if isinstance(video_source, int) \
+        else Path(str(video_source)).stem.upper()
+
     try:
         while is_running:
+            t0 = time.time()
             ret, frame = cap.read()
             if not ret:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -152,6 +242,7 @@ def generate_frames():
             result = detector.process_frame(frame)
             stats['total_frames'] += 1
             stats['current_fps'] = result.fps
+            processing_ms = (time.time() - t0) * 1000
 
             if result.has_violence:
                 stats['violence_detections'] += 1
@@ -161,6 +252,10 @@ def generate_frames():
                         incident_data = _save_incident(det)
                         if incident_data:
                             socketio.emit('violence_alert', incident_data)
+
+            # Write detection log every LOG_INTERVAL frames
+            if stats['total_frames'] % LOG_INTERVAL == 0:
+                _write_detection_log(stream_id, result, processing_ms)
 
             annotated = detector.draw_results(frame, result)
 
@@ -244,13 +339,13 @@ def get_alerts():
     limit = request.args.get('limit', 50, type=int)
     session = get_session()
     try:
-        incidents = (
-            session.query(Incident)
-            .order_by(Incident.timestamp.desc())
+        alerts = (
+            session.query(Alert)
+            .order_by(Alert.timestamp.desc())
             .limit(limit)
             .all()
         )
-        return jsonify([i.to_dict() for i in incidents])
+        return jsonify([a.to_dict() for a in alerts])
     finally:
         session.close()
 
